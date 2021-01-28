@@ -251,4 +251,114 @@ class enrol_self_external_testcase extends externallib_advanced_testcase {
         self::assertCount(0, $result['warnings']);
         self::assertEquals(1, $DB->count_records('user_enrolments', array('enrolid' => $instance3->id)));
     }
+
+    /**
+     * Test unenrol user
+     */
+    public function test_unenrol_user() {
+        global $DB;
+
+        self::resetAfterTest(true);
+
+        // Create our user and course.
+        $user = self::getDataGenerator()->create_user();
+        self::setUser($user);
+        $course = self::getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        // Student role is an archetype for self unenrolment capability.
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        role_assign($studentrole->id, $user->id, $coursecontext);
+
+        // Set up self-enrol for the given course.
+        $selfplugin = enrol_get_plugin('self');
+        $instance = $DB->get_record('enrol', array('courseid' => $course->id, 'enrol' => 'self'), '*', MUST_EXIST);
+        $selfplugin->update_status($instance, ENROL_INSTANCE_ENABLED);
+
+        // Test...
+        $selfplugin->enrol_user($instance, $user->id);
+        $result = enrol_self_external::unenrol_user($course->id);
+        $result = external_api::clean_returnvalue(enrol_self_external::unenrol_user_returns(), $result);
+
+        self::assertTrue($result['status']);
+        self::assertEquals(0, $DB->count_records('user_enrolments', array('enrolid' => $instance->id)));
+        self::assertFalse(is_enrolled($coursecontext, $user));
+    }
+
+    public function test_unenrol_user_when_not_enroled() {
+        global $DB;
+
+        self::resetAfterTest(true);
+
+        // Create our user and course.
+        $user = self::getDataGenerator()->create_user();
+        self::setUser($user);
+        $course = self::getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        // Test...
+        $this->expectException('require_login_exception');
+        $this->expectExceptionMessage('Course or activity not accessible. (Not enrolled)');
+        enrol_self_external::unenrol_user($course->id);
+    }
+
+    public function test_unenrol_when_enrol_disabled() {
+        global $DB;
+
+        self::resetAfterTest(true);
+
+        // Create our user and course.
+        $user = self::getDataGenerator()->create_user();
+        self::setUser($user);
+        $course = self::getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        // Student role is an archetype for self unenrolment capability.
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        role_assign($studentrole->id, $user->id, $coursecontext);
+
+        // Enrol user then disable self-enrolment.
+        $selfplugin = enrol_get_plugin('self');
+        $instance = $DB->get_record('enrol', array('courseid' => $course->id, 'enrol' => 'self'), '*', MUST_EXIST);
+        $selfplugin->enrol_user($instance, $user->id);
+        $selfplugin->update_status($instance, ENROL_INSTANCE_DISABLED);
+
+        // The user was recently enrolled, however the $USER enrollment
+        // cache has not been reset yet. Since self-enrolment for the course
+        // has been disabled, the cache will never be remade and hence
+        // 'requireloginerror' will be raised when validating context.
+        $this->expectException('require_login_exception');
+        $this->expectExceptionMessage('Course or activity not accessible. (Not enrolled)');
+        enrol_self_external::unenrol_user($course->id);
+    }
+
+    public function test_unenrol_with_no_unenrol_permission() {
+        global $DB;
+
+        self::resetAfterTest(true);
+
+        // Create our user and course.
+        $user = self::getDataGenerator()->create_user();
+        self::setUser($user);
+        $course = self::getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        // Student role is an archetype for self unenrolment capability.
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        role_assign($studentrole->id, $user->id, $coursecontext);
+
+        // Set up self-enrol for the given course.
+        $selfplugin = enrol_get_plugin('self');
+        $instance = $DB->get_record('enrol', array('courseid' => $course->id, 'enrol' => 'self'), '*', MUST_EXIST);
+        $selfplugin->update_status($instance, ENROL_INSTANCE_ENABLED);
+
+        // Enrol user for test
+        $selfplugin->enrol_user($instance, $user->id);
+
+        // Test...
+        assign_capability('enrol/self:unenrolself', CAP_PREVENT, $studentrole->id, $coursecontext, true);
+        $this->expectException('moodle_exception');
+        $this->expectExceptionMessage('Unenrolment is disabled or inactive');
+        enrol_self_external::unenrol_user($course->id);
+    }
 }

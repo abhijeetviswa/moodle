@@ -254,4 +254,76 @@ class enrol_self_external extends external_api {
             )
         );
     }
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 3.11
+     */
+    public static function unenrol_user_parameters() {
+        return new external_function_parameters(
+            array(
+                'courseid' => new external_value(PARAM_INT, 'Id of the course'),
+            )
+        );
+    }
+
+
+    /**
+     * Self unenrol the current user in the given course.
+     *
+     * @param int $courseid id of course
+     * @return array of warnings and status result
+     * @since Moodle 3.11
+     * @throws moodle_exception
+     */
+    public static function unenrol_user($courseid) {
+        global $CFG, $DB, $USER;
+
+        require_once($CFG->libdir . '/enrollib.php');
+
+        $params = self::validate_parameters(self::unenrol_user_parameters(), array('courseid' => $courseid));
+
+        $course = get_course($params['courseid']);
+        $context = context_course::instance($course->id);
+        self::validate_context($context);
+
+        $plugin = enrol_get_plugin('self');
+        if (empty($plugin)) {
+            throw new moodle_exception('canntunenrol', 'enrol_self');
+        }
+
+        // Check if self-enrolment is available for given course.
+        $instance = $DB->get_record('enrol', array('courseid' => $courseid, 'enrol' => 'self'));
+        if (!$instance) {
+            throw new moodle_exception('canntunenrol', 'enrol_manual');
+        }
+
+        // This call checks if unenrolling is possible.
+        if (!$plugin->get_unenrolself_link($instance)) {
+            throw new moodle_exception('canntunenrol', 'enrol_self');
+        }
+
+        $plugin->unenrol_user($instance, $USER->id);
+
+        // We check if enrollment succeeded.
+        $result = array();
+        $result['status'] = !is_enrolled($context, $USER->id);
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since Moodle 3.11
+     */
+    public static function unenrol_user_returns() {
+        return new external_single_structure(
+            array(
+                'status' => new external_value(PARAM_BOOL, 'status: true if the user is unenrolled, false otherwise'),
+            )
+        );
+    }
 }

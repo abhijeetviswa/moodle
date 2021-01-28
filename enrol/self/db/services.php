@@ -40,5 +40,14 @@ $functions = array(
         'description' => 'Self enrol the current user in the given course.',
         'type'        => 'write',
         'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
-    )
+    ),
+
+    'enrol_self_unenrol_user' => array(
+        'classname'   => 'enrol_self_external',
+        'methodname'  => 'unenrol_user',
+        'classpath'   => 'enrol/self/externallib.php',
+        'description' => 'Uenrol current user from self enroled given course',
+        'type'        => 'write',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+    ),
 );
